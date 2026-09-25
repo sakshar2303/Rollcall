@@ -21,7 +21,7 @@ export async function generateCaptionCandidates(visionData: any, vibe: VibeClass
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
   const prompt = `You are an expert Instagram copywriter. Given a scene description and a target vibe, generate 6-8 unique, high-quality caption options for the photo. 
 Do not include hashtags. Do not use quotes around the captions. Output exactly one caption per line.

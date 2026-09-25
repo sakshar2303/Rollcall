@@ -15,7 +15,7 @@ export async function extractImageVibe(base64Image: string) {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
   const prompt = `You are an expert visual analyst. Your task is to extract structural visual attributes from an image to inform a vibe-matching algorithm for music and captions. 
 
