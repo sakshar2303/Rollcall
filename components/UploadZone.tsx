@@ -6,8 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export function UploadZone() {
   const [dragActive, setDragActive] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
   
@@ -38,31 +38,34 @@ export function UploadZone() {
     e.stopPropagation();
     setDragActive(false);
     
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFiles(Array.from(e.dataTransfer.files));
     }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      handleFiles(Array.from(e.target.files));
     }
   };
 
-  const handleFile = (selectedFile: File) => {
-    if (!selectedFile.type.startsWith("image/")) {
-      alert("Please upload an image file");
+  const handleFiles = (selectedFiles: File[]) => {
+    const validFiles = selectedFiles.filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (validFiles.length === 0) {
+      alert("Please upload image or video files.");
       return;
     }
-    setFile(selectedFile);
     
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreview(objectUrl);
+    // For now we just use the files directly, video support can extract frames later
+    setFiles(validFiles.slice(0, 10)); // Limit to 10 max
+    
+    const objectUrls = validFiles.slice(0, 10).map(f => URL.createObjectURL(f));
+    setPreviews(objectUrls);
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     
     setIsUploading(true);
     setUploadResult(null);
@@ -71,7 +74,9 @@ export function UploadZone() {
     
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      files.forEach(file => {
+        formData.append("files", file);
+      });
       formData.append("language", language);
       formData.append("genre", genre);
       
@@ -92,10 +97,7 @@ export function UploadZone() {
 
   const handleFeedback = async (type: "song" | "caption", targetId: string, isPositive: boolean) => {
     if (feedbackGiven[targetId]) return;
-    
-    // Optimistic UI update
     setFeedbackGiven(prev => ({ ...prev, [targetId]: isPositive }));
-
     try {
       await fetch("/api/feedback", {
         method: "POST",
@@ -112,7 +114,7 @@ export function UploadZone() {
       <div 
         className={`relative w-full h-80 rounded-3xl border-2 border-dashed transition-all duration-300 ease-in-out flex flex-col items-center justify-center overflow-hidden
           ${dragActive ? "border-primary bg-primary/5 scale-[1.02]" : "border-border bg-card/50 hover:bg-card hover:border-muted-foreground/50"}
-          ${preview ? "border-transparent bg-transparent" : ""}
+          ${previews.length > 0 ? "border-transparent bg-transparent" : ""}
         `}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -121,14 +123,15 @@ export function UploadZone() {
       >
         <input 
           type="file" 
+          multiple
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-          accept="image/*"
+          accept="image/*,video/*"
           onChange={handleChange}
           disabled={isUploading}
         />
         
         <AnimatePresence mode="wait">
-          {!preview ? (
+          {previews.length === 0 ? (
             <motion.div 
               key="upload-prompt"
               initial={{ opacity: 0, y: 10 }}
@@ -140,7 +143,7 @@ export function UploadZone() {
                 <UploadCloud size={32} />
               </div>
               <div className="text-center">
-                <p className="text-lg font-medium text-foreground">Drag and drop your photo</p>
+                <p className="text-lg font-medium text-foreground">Drag and drop photos or videos</p>
                 <p className="text-sm text-muted-foreground mt-1">or click to browse from your device</p>
               </div>
             </motion.div>
@@ -149,16 +152,22 @@ export function UploadZone() {
               key="image-preview"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="absolute inset-0 w-full h-full"
+              className="absolute inset-0 w-full h-full flex items-center justify-center bg-card rounded-3xl overflow-hidden"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={preview} 
-                alt="Upload preview" 
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                <p className="text-white font-medium mb-2">Click or drag to replace</p>
+              <div className="flex gap-2 p-4 w-full h-full overflow-x-auto snap-x">
+                {previews.map((src, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img 
+                    key={i}
+                    src={src} 
+                    alt={`Preview ${i+1}`} 
+                    className="h-full w-auto object-cover rounded-xl snap-center shrink-0 border border-border/50"
+                  />
+                ))}
+              </div>
+              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                <p className="text-white font-medium mb-2">{files.length} items selected</p>
+                <p className="text-white/70 text-sm">Click or drag to replace all</p>
               </div>
             </motion.div>
           )}
@@ -166,7 +175,7 @@ export function UploadZone() {
       </div>
 
       <AnimatePresence>
-        {preview && !uploadResult && (
+        {previews.length > 0 && !uploadResult && (
           <motion.div 
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -240,7 +249,7 @@ export function UploadZone() {
                 </h3>
               </div>
               <button 
-                onClick={() => { setUploadResult(null); setPreview(null); setFile(null); }}
+                onClick={() => { setUploadResult(null); setPreviews([]); setFiles([]); }}
                 className="text-sm font-medium border border-border px-4 py-2 rounded-lg hover:bg-muted transition-colors"
               >
                 Reset

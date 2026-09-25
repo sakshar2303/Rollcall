@@ -67,3 +67,22 @@ Respond ONLY with a valid JSON object matching this exact structure, with no mar
     throw error;
   }
 }
+
+// Aggregates multiple vision analysis results into one cohesive description for Step 2
+export function aggregateVisionData(visionResults: any[]) {
+  if (visionResults.length === 0) return null;
+  if (visionResults.length === 1) return visionResults[0];
+
+  // Combine colors uniquely
+  const allColors = visionResults.flatMap(r => r.dominantColors || []);
+  const dominantColors = Array.from(new Set(allColors)).slice(0, 5);
+
+  // For text fields, we can just join them to give the LLM context of the full "carousel story"
+  return {
+    scene: "Carousel sequence: " + visionResults.map(r => r.scene).join(" -> "),
+    lighting: visionResults.map(r => r.lighting)[0], // Assume first frame sets lighting or use a mixed description
+    dominantColors,
+    activity: visionResults.map(r => r.activity).join(" then "),
+    timeOfDay: visionResults[0].timeOfDay // Generally stays the same across a carousel
+  };
+}
