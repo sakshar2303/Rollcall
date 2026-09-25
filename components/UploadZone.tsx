@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { UploadCloud, Image as ImageIcon, Loader2 } from "lucide-react";
+import { UploadCloud, Image as ImageIcon, Loader2, Music, Globe } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function UploadZone() {
@@ -10,6 +10,13 @@ export function UploadZone() {
   const [preview, setPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
+  
+  // Preferences
+  const [language, setLanguage] = useState("English");
+  const [genre, setGenre] = useState("pop");
+
+  const languages = ["English", "Spanish", "Hindi", "Korean", "Punjabi", "French", "Japanese"];
+  const genres = ["pop", "hip-hop", "indie", "electronic", "r-n-b", "rock", "bollywood"];
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -45,7 +52,6 @@ export function UploadZone() {
     }
     setFile(selectedFile);
     
-    // Create preview
     const objectUrl = URL.createObjectURL(selectedFile);
     setPreview(objectUrl);
   };
@@ -59,6 +65,8 @@ export function UploadZone() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("language", language);
+      formData.append("genre", genre);
       
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -136,14 +144,44 @@ export function UploadZone() {
       <AnimatePresence>
         {preview && !uploadResult && (
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex justify-center"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="flex flex-col gap-4 overflow-hidden"
           >
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Globe size={14} /> Language
+                </label>
+                <select 
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="bg-card border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  disabled={isUploading}
+                >
+                  {languages.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Music size={14} /> Vibe / Genre
+                </label>
+                <select 
+                  value={genre}
+                  onChange={(e) => setGenre(e.target.value)}
+                  className="bg-card border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-transform capitalize"
+                  disabled={isUploading}
+                >
+                  {genres.map(g => <option key={g} value={g}>{g.replace('-', ' ')}</option>)}
+                </select>
+              </div>
+            </div>
+
             <button 
               onClick={handleUpload}
               disabled={isUploading}
-              className="group relative flex h-14 items-center justify-center gap-2 rounded-full bg-primary px-8 text-primary-foreground font-medium text-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:pointer-events-none"
+              className="group relative flex w-full mt-4 h-14 items-center justify-center gap-2 rounded-xl bg-primary px-8 text-primary-foreground font-medium text-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none disabled:scale-100"
             >
               {isUploading ? (
                 <>
@@ -166,12 +204,53 @@ export function UploadZone() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-6 rounded-2xl bg-card border border-border"
+            className="p-6 rounded-2xl bg-card border border-border flex flex-col gap-4"
           >
-            <h3 className="font-serif text-2xl mb-4">Vision Analysis Result</h3>
-            <pre className="text-sm text-muted-foreground overflow-auto p-4 bg-black/50 rounded-xl">
-              {JSON.stringify(uploadResult, null, 2)}
-            </pre>
+            <div>
+              <h3 className="font-serif text-xl mb-2 text-primary">1. Vision Extraction</h3>
+              <pre className="text-xs text-muted-foreground overflow-auto p-3 bg-black/50 rounded-lg">
+                {JSON.stringify(uploadResult.vision, null, 2)}
+              </pre>
+            </div>
+            
+            <div>
+              <h3 className="font-serif text-xl mb-2 text-primary">2. Jev AI Vibe Classification</h3>
+              <pre className="text-xs text-muted-foreground overflow-auto p-3 bg-black/50 rounded-lg">
+                {JSON.stringify(uploadResult.classification, null, 2)}
+              </pre>
+            </div>
+            
+            {uploadResult.songs && (
+              <div>
+                <h3 className="font-serif text-xl mb-2 text-primary">3. Spotify Song Matches</h3>
+                <div className="flex flex-col gap-2">
+                  {uploadResult.songs.map((song: any, i: number) => (
+                    <div key={song.spotifyId || i} className="flex items-center gap-3 bg-black/30 p-2 rounded-lg">
+                      {song.albumArt && <img src={song.albumArt} alt={song.title} className="w-10 h-10 rounded-md" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{song.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                      </div>
+                      <div className="text-right text-[10px] text-muted-foreground flex flex-col items-end">
+                        <span title="Energy Match">⚡ {song.trackEnergy} / {song.targetEnergy}</span>
+                        <span title="Valence Match">🎵 {song.trackValence} / {song.targetValence}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <button 
+              onClick={() => {
+                setUploadResult(null);
+                setPreview(null);
+                setFile(null);
+              }}
+              className="mt-4 py-3 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+            >
+              Start Over
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
