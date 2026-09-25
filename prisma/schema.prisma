@@ -1,0 +1,118 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  uploads   Upload[]
+  feedback  Feedback[]
+}
+
+model Upload {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id])
+  
+  language  String?  // The user's requested language for songs
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos             Photo[]
+  classification     Classification?
+  songSuggestions    SongSuggestion[]
+  captionSuggestions CaptionSuggestion[]
+}
+
+model Photo {
+  id          String   @id @default(cuid())
+  uploadId    String
+  upload      Upload   @relation(fields: [uploadId], references: [id])
+  
+  url         String   // URL to the uploaded image in storage
+  
+  // Step 1: Structured vision extraction (JSON)
+  scene          String?
+  lighting       String?
+  dominantColors String[]
+  activity       String?
+  timeOfDay      String?
+  
+  createdAt   DateTime @default(now())
+}
+
+model Classification {
+  id          String   @id @default(cuid())
+  uploadId    String   @unique
+  upload      Upload   @relation(fields: [uploadId], references: [id])
+  
+  // Step 2: Vibe classification via Jev AI
+  choice      String   // Mood category: chill / energetic / etc.
+  score       Int      // Energy level 1-5
+  isAesthetic Boolean  // Yes/No: aesthetic/posed vs candid
+  
+  // Optional mood override (Mood Drift feature)
+  overrideChoice String?
+  
+  createdAt   DateTime @default(now())
+}
+
+model SongSuggestion {
+  id          String   @id @default(cuid())
+  uploadId    String
+  upload      Upload   @relation(fields: [uploadId], references: [id])
+  
+  spotifyId   String
+  title       String
+  artist      String
+  albumArt    String
+  previewUrl  String?
+  
+  // Explain this match values
+  targetEnergy  Float
+  trackEnergy   Float
+  targetValence Float
+  trackValence  Float
+  
+  feedbacks   Feedback[]
+  createdAt   DateTime @default(now())
+}
+
+model CaptionSuggestion {
+  id          String   @id @default(cuid())
+  uploadId    String
+  upload      Upload   @relation(fields: [uploadId], references: [id])
+  
+  text        String
+  
+  // Jev AI Ranking
+  predictedEngagementScore Float
+  toneCategory             String
+  isCliche                 Boolean
+  
+  feedbacks   Feedback[]
+  createdAt   DateTime @default(now())
+}
+
+model Feedback {
+  id                  String   @id @default(cuid())
+  sessionId           String
+  session             Session  @relation(fields: [sessionId], references: [id])
+  
+  songSuggestionId    String?
+  songSuggestion      SongSuggestion? @relation(fields: [songSuggestionId], references: [id])
+  
+  captionSuggestionId String?
+  captionSuggestion   CaptionSuggestion? @relation(fields: [captionSuggestionId], references: [id])
+  
+  isPositive          Boolean  // true for thumbs up, false for thumbs down
+  
+  createdAt           DateTime @default(now())
+}
