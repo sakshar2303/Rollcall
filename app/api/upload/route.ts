@@ -151,9 +151,9 @@ export async function POST(req: NextRequest) {
       captions: upload.captionSuggestions
     });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Upload] Error processing request:", error);
-    const message = error instanceof Error ? error.message : "Failed to process upload";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const message = error?.message || String(error) || "Unknown Server Crash";
+    return NextResponse.json({ error: `CRASH: ${message}` }, { status: 500 });
   }
 }
