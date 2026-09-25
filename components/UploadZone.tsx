@@ -50,19 +50,94 @@ export function UploadZone() {
     }
   };
 
-  const handleFiles = (selectedFiles: File[]) => {
+  const handleFiles = async (selectedFiles: File[]) => {
     const validFiles = selectedFiles.filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
     if (validFiles.length === 0) {
       alert("Please upload image or video files.");
       return;
     }
     
-    // For now we just use the files directly, video support can extract frames later
-    setFiles(validFiles.slice(0, 10)); // Limit to 10 max
+    setIsUploading(true); // Show loader while extracting frames
     
-    const objectUrls = validFiles.slice(0, 10).map(f => URL.createObjectURL(f));
-    setPreviews(objectUrls);
+    try {
+      const processedFiles: File[] = [];
+      
+      for (const file of validFiles.slice(0, 5)) {
+        if (file.type.startsWith("video/")) {
+          const frames = await extractVideoFrames(file, 3);
+          processedFiles.push(...frames);
+        } else {
+          processedFiles.push(file);
+        }
+      }
+      
+      const finalFiles = processedFiles.slice(0, 10); // Limit total frames/images
+      setFiles(finalFiles);
+      
+      const objectUrls = finalFiles.map(f => URL.createObjectURL(f));
+      setPreviews(objectUrls);
+    } catch (e) {
+      console.error("Error processing files:", e);
+      alert("Failed to process some files. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  // Helper to extract frames from video client-side
+  const extractVideoFrames = (file: File, frameCount: number): Promise<File[]> => {
+    return new Promise((resolve) => {
+      const video = document.createElement("video");
+      const url = URL.createObjectURL(file);
+      video.src = url;
+      video.muted = true;
+      video.playsInline = true;
+      video.crossOrigin = "anonymous";
+      
+      const frames: File[] = [];
+      let currentFrame = 0;
+      
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        // Take frames at 25%, 50%, and 75% of the video to get a good summary
+        const timestamps = [duration * 0.25, duration * 0.5, duration * 0.75].slice(0, frameCount);
+        
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        
+        const captureFrame = () => {
+          if (!ctx) return resolve(frames);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const frameFile = new File([blob], `${file.name}-frame-${currentFrame}.jpg`, { type: "image/jpeg" });
+              frames.push(frameFile);
+            }
+            
+            currentFrame++;
+            if (currentFrame < timestamps.length) {
+              video.currentTime = timestamps[currentFrame];
+            } else {
+              URL.revokeObjectURL(url);
+              resolve(frames);
+            }
+          }, "image/jpeg", 0.8);
+        };
+        
+        video.onseeked = captureFrame;
+        video.currentTime = timestamps[0] || 0;
+      };
+      
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve([]); // Failsafe
+      };
+    });
+  };
+
 
   const handleUpload = async () => {
     if (files.length === 0) return;
