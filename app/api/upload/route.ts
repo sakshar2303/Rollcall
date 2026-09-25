@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractImageVibe } from "@/lib/vision";
 import { classifyVibe } from "@/lib/jevai";
 import { getSongRecommendations } from "@/lib/matching";
+import { generateAndRankCaptions } from "@/lib/captions";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,13 +34,17 @@ export async function POST(req: NextRequest) {
     const songRecommendations = await getSongRecommendations(classificationData, language, [genre]);
     console.log(`[Upload] Found ${songRecommendations.length} songs`);
 
+    // Step 5: Generate & rank captions
+    const rankedCaptions = await generateAndRankCaptions(visionData, classificationData);
+    console.log(`[Upload] Generated ${rankedCaptions.length} ranked captions`);
+
     // TODO: 1. Save to Prisma DB (Upload, Photo records)
-    // TODO: 4. Generate & rank captions
 
     return NextResponse.json({
       vision: visionData,
       classification: classificationData,
-      songs: songRecommendations
+      songs: songRecommendations,
+      captions: rankedCaptions
     });
     
   } catch (error) {
