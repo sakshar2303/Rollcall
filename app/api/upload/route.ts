@@ -6,6 +6,31 @@ import { generateAndRankCaptions } from "@/lib/captions";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateSessionId } from "@/lib/session";
 
+// ── Validation constants ──────────────────────────────────────────
+const ALLOWED_TYPES = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"
+]);
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB per file
+const MAX_FILES = 10;
+
+// ── Simple in-memory rate limiter (per session, no Redis required) ─
+// Falls back gracefully; replace with @upstash/ratelimit when Redis is available.
+const requestCounts = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 5;      // max requests
+const RATE_WINDOW_MS = 60_000; // per 60 seconds
+
+function checkRateLimit(sessionId: string): boolean {
+  const now = Date.now();
+  const entry = requestCounts.get(sessionId);
+  if (!entry || now > entry.resetAt) {
+    requestCounts.set(sessionId, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true; // allowed
+  }
+  if (entry.count >= RATE_LIMIT) return false; // blocked
+  entry.count++;
+  return true;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -13,13 +38,39 @@ export async function POST(req: NextRequest) {
     const language = (formData.get("language") as string) || "English";
     const genre = (formData.get("genre") as string) || "pop";
     
+    // ── Validation ─────────────────────────────────────────────────
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
+    }
+    if (files.length > MAX_FILES) {
+      return NextResponse.json({ error: `Maximum ${MAX_FILES} files allowed` }, { status: 400 });
+    }
+    for (const file of files) {
+      if (!ALLOWED_TYPES.has(file.type)) {
+        return NextResponse.json(
+          { error: `Unsupported file type: ${file.type}. Allowed: JPEG, PNG, WEBP, GIF, HEIC` },
+          { status: 415 }
+        );
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `File "${file.name}" exceeds the 10 MB limit` },
+          { status: 413 }
+        );
+      }
     }
 
     console.log(`[Upload] Processing ${files.length} images - Lang: ${language}, Genre: ${genre}`);
     
     const sessionId = await getOrCreateSessionId();
+
+    // ── Rate limiting ─────────────────────────────────────────────
+    if (!checkRateLimit(sessionId)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a minute before trying again." },
+        { status: 429 }
+      );
+    }
 
     // Process all images in parallel
     const visionPromises = files.map(async (file) => {

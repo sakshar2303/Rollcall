@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { UploadCloud, Image as ImageIcon, Loader2, Music, Globe, Info, ThumbsUp, ThumbsDown } from "lucide-react";
+import { UploadCloud, Image as ImageIcon, Loader2, Music, Globe, Info, ThumbsUp, ThumbsDown, AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { CopyButton } from "./CopyButton";
 
 export function UploadZone() {
   const [dragActive, setDragActive] = useState(false);
@@ -10,6 +11,7 @@ export function UploadZone() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   // Feedback state
   const [feedbackGiven, setFeedbackGiven] = useState<{ [key: string]: boolean }>({});
@@ -53,7 +55,7 @@ export function UploadZone() {
   const handleFiles = async (selectedFiles: File[]) => {
     const validFiles = selectedFiles.filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
     if (validFiles.length === 0) {
-      alert("Please upload image or video files.");
+      setUploadError("Please upload image or video files (JPEG, PNG, WEBP, GIF, HEIC, or MP4).");
       return;
     }
     
@@ -144,6 +146,7 @@ export function UploadZone() {
     
     setIsUploading(true);
     setUploadResult(null);
+    setUploadError(null);
     setExpandedDetails(null);
     setFeedbackGiven({});
     
@@ -161,10 +164,14 @@ export function UploadZone() {
       });
       
       const data = await response.json();
-      setUploadResult(data);
+      if (data.error) {
+        setUploadError(data.error);
+      } else {
+        setUploadResult(data);
+      }
     } catch (error) {
       console.error("Upload failed", error);
-      alert("Upload failed. Please try again.");
+      setUploadError("Something went wrong. Please try again.");
     } finally {
       setIsUploading(false);
     }
@@ -307,6 +314,24 @@ export function UploadZone() {
         )}
       </AnimatePresence>
 
+      {/* ── Inline Error Banner ───────────────────────────── */}
+      <AnimatePresence>
+        {uploadError && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm"
+          >
+            <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+            <p className="text-red-300 flex-1 leading-relaxed">{uploadError}</p>
+            <button onClick={() => setUploadError(null)} className="text-red-400 hover:text-red-200 transition-colors">
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {uploadResult && (
           <motion.div
@@ -438,7 +463,8 @@ export function UploadZone() {
                           </span>
                         </div>
                         
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <CopyButton text={caption.text} />
                           <button 
                             onClick={() => handleFeedback("caption", caption.id, true)}
                             className={`p-1.5 rounded-full transition-colors ${feedbackGiven[caption.id] === true ? "text-green-400 bg-green-400/20" : "text-muted-foreground hover:text-green-400 hover:bg-green-400/10"}`}
