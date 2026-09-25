@@ -87,8 +87,8 @@ export async function POST(req: NextRequest) {
     // Step 2: Vibe classification via Jev AI using the aggregated data
     const classificationData = await classifyVibe(aggregatedVisionData);
 
-    // Step 3 & 4: Map vibes to Spotify audio features and search
-    const songRecommendations = await getSongRecommendations(classificationData, language, [genre]);
+    // Step 3 & 4: Map vibes to Spotify audio features and search (with personalization bias)
+    const songRecommendations = await getSongRecommendations(classificationData, language, [genre], sessionId);
 
     // Step 5: Generate & rank captions
     const rankedCaptions = await generateAndRankCaptions(aggregatedVisionData, classificationData);

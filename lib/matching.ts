@@ -55,13 +55,65 @@ export function mapVibeToAudioFeatures(vibe: VibeClassification) {
   return { targetValence, targetEnergy, targetDanceability, targetAcousticness };
 }
 
+import { prisma } from "./prisma";
+
 export async function getSongRecommendations(
   vibe: VibeClassification, 
   language: string = "English",
-  genres: string[] = ["pop"]
+  genres: string[] = ["pop"],
+  sessionId?: string
 ): Promise<SongSuggestion[]> {
   const token = await getSpotifyToken();
   const targetFeatures = mapVibeToAudioFeatures(vibe);
+
+  // --- Personalization Bias (Feedback Loop) ---
+  let energyOffset = 0;
+  let valenceOffset = 0;
+
+  if (sessionId) {
+    // Fetch user's past feedback on songs
+    const pastFeedback = await prisma.feedback.findMany({
+      where: {
+        sessionId,
+        songSuggestionId: { not: null }
+      },
+      include: {
+        songSuggestion: true
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10 // only look at recent feedback
+    });
+
+    if (pastFeedback.length > 0) {
+      let energyAdjust = 0;
+      let valenceAdjust = 0;
+
+      for (const fb of pastFeedback) {
+        if (!fb.songSuggestion) continue;
+        
+        // If they liked it, bias toward this song's actual features
+        // If they disliked it, bias away from this song's features
+        const weight = fb.isPositive ? 1 : -1;
+        
+        // Difference between the track and the original target
+        const eDiff = fb.songSuggestion.trackEnergy - fb.songSuggestion.targetEnergy;
+        const vDiff = fb.songSuggestion.trackValence - fb.songSuggestion.targetValence;
+        
+        energyAdjust += (eDiff * weight * 0.1); // Small nudge factor (10%)
+        valenceAdjust += (vDiff * weight * 0.1);
+      }
+
+      // Average the adjustments
+      energyOffset = energyAdjust / pastFeedback.length;
+      valenceOffset = valenceAdjust / pastFeedback.length;
+      
+      console.log(`[Personalization] Applying bias offsets - Energy: ${energyOffset.toFixed(3)}, Valence: ${valenceOffset.toFixed(3)}`);
+      
+      targetFeatures.targetEnergy = Math.max(0, Math.min(1, targetFeatures.targetEnergy + energyOffset));
+      targetFeatures.targetValence = Math.max(0, Math.min(1, targetFeatures.targetValence + valenceOffset));
+    }
+  }
+
 
   if (token === "mock_token") {
     // Return mock recommendations for testing
