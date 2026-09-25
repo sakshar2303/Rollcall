@@ -11,6 +11,9 @@ export function UploadZone() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
   
+  // Feedback state
+  const [feedbackGiven, setFeedbackGiven] = useState<{ [key: string]: boolean }>({});
+
   // Preferences
   const [language, setLanguage] = useState("English");
   const [genre, setGenre] = useState("pop");
@@ -64,6 +67,7 @@ export function UploadZone() {
     setIsUploading(true);
     setUploadResult(null);
     setExpandedDetails(null);
+    setFeedbackGiven({});
     
     try {
       const formData = new FormData();
@@ -83,6 +87,23 @@ export function UploadZone() {
       alert("Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleFeedback = async (type: "song" | "caption", targetId: string, isPositive: boolean) => {
+    if (feedbackGiven[targetId]) return;
+    
+    // Optimistic UI update
+    setFeedbackGiven(prev => ({ ...prev, [targetId]: isPositive }));
+
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, targetId, isPositive }),
+      });
+    } catch (error) {
+      console.error("Failed to save feedback", error);
     }
   };
 
@@ -236,7 +257,7 @@ export function UploadZone() {
                 <div className="flex flex-col gap-3">
                   {uploadResult.songs.map((song: any, i: number) => (
                     <motion.div 
-                      key={song.spotifyId || i}
+                      key={song.id || i}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.1 }}
@@ -257,17 +278,27 @@ export function UploadZone() {
                         <div className="flex gap-2">
                           <button 
                             className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
-                            onClick={() => setExpandedDetails(expandedDetails === song.spotifyId ? null : song.spotifyId)}
+                            onClick={() => setExpandedDetails(expandedDetails === song.id ? null : song.id)}
                           >
                             <Info size={16} />
                           </button>
-                          <button className="p-2 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-full transition-colors"><ThumbsUp size={16} /></button>
-                          <button className="p-2 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"><ThumbsDown size={16} /></button>
+                          <button 
+                            onClick={() => handleFeedback("song", song.id, true)}
+                            className={`p-2 rounded-full transition-colors ${feedbackGiven[song.id] === true ? "text-green-400 bg-green-400/20" : "text-muted-foreground hover:text-green-400 hover:bg-green-400/10"}`}
+                          >
+                            <ThumbsUp size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleFeedback("song", song.id, false)}
+                            className={`p-2 rounded-full transition-colors ${feedbackGiven[song.id] === false ? "text-red-400 bg-red-400/20" : "text-muted-foreground hover:text-red-400 hover:bg-red-400/10"}`}
+                          >
+                            <ThumbsDown size={16} />
+                          </button>
                         </div>
                       </div>
                       
                       <AnimatePresence>
-                        {expandedDetails === song.spotifyId && (
+                        {expandedDetails === song.id && (
                           <motion.div 
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: "auto", opacity: 1 }}
@@ -305,7 +336,7 @@ export function UploadZone() {
                 <div className="grid gap-3">
                   {uploadResult.captions.map((caption: any, i: number) => (
                     <motion.div 
-                      key={i}
+                      key={caption.id || i}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.2 + (i * 0.1) }}
@@ -324,8 +355,18 @@ export function UploadZone() {
                         </div>
                         
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="p-1.5 text-muted-foreground hover:text-green-400 hover:bg-green-400/10 rounded-full transition-colors"><ThumbsUp size={14} /></button>
-                          <button className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"><ThumbsDown size={14} /></button>
+                          <button 
+                            onClick={() => handleFeedback("caption", caption.id, true)}
+                            className={`p-1.5 rounded-full transition-colors ${feedbackGiven[caption.id] === true ? "text-green-400 bg-green-400/20" : "text-muted-foreground hover:text-green-400 hover:bg-green-400/10"}`}
+                          >
+                            <ThumbsUp size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleFeedback("caption", caption.id, false)}
+                            className={`p-1.5 rounded-full transition-colors ${feedbackGiven[caption.id] === false ? "text-red-400 bg-red-400/20" : "text-muted-foreground hover:text-red-400 hover:bg-red-400/10"}`}
+                          >
+                            <ThumbsDown size={14} />
+                          </button>
                         </div>
                       </div>
                     </motion.div>

@@ -3,6 +3,8 @@ import { extractImageVibe } from "@/lib/vision";
 import { classifyVibe } from "@/lib/jevai";
 import { getSongRecommendations } from "@/lib/matching";
 import { generateAndRankCaptions } from "@/lib/captions";
+import { prisma } from "@/lib/prisma";
+import { getOrCreateSessionId } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,29 +24,77 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Upload] Processing image: ${file.name} (${file.type}) - Lang: ${language}, Genre: ${genre}`);
     
+    const sessionId = await getOrCreateSessionId();
+
     // Step 1: Extract structured vision data
     const visionData = await extractImageVibe(base64Image);
-    console.log("[Upload] Vision Data Extracted");
-
+    
     // Step 2: Vibe classification via Jev AI
     const classificationData = await classifyVibe(visionData);
-    console.log("[Upload] Classification Data Extracted");
 
     // Step 3 & 4: Map vibes to Spotify audio features and search
+    // We pass the sessionId here to optionally allow getSongRecommendations to use feedback history in the future (Step 6 bias)
     const songRecommendations = await getSongRecommendations(classificationData, language, [genre]);
-    console.log(`[Upload] Found ${songRecommendations.length} songs`);
 
     // Step 5: Generate & rank captions
     const rankedCaptions = await generateAndRankCaptions(visionData, classificationData);
-    console.log(`[Upload] Generated ${rankedCaptions.length} ranked captions`);
 
-    // TODO: 1. Save to Prisma DB (Upload, Photo records)
+    // Step 6: Save everything to Prisma DB
+    const upload = await prisma.upload.create({
+      data: {
+        sessionId,
+        language,
+        photos: {
+          create: {
+            url: "local-base64-omitted", // In production this would be an S3/Cloudinary URL
+            scene: visionData.scene,
+            lighting: visionData.lighting,
+            dominantColors: visionData.dominantColors || [],
+            activity: visionData.activity,
+            timeOfDay: visionData.timeOfDay,
+          }
+        },
+        classification: {
+          create: {
+            choice: classificationData.choice,
+            score: classificationData.score,
+            isAesthetic: classificationData.isAesthetic
+          }
+        },
+        songSuggestions: {
+          create: songRecommendations.map(song => ({
+            spotifyId: song.spotifyId,
+            title: song.title,
+            artist: song.artist,
+            albumArt: song.albumArt,
+            previewUrl: song.previewUrl,
+            targetEnergy: song.targetEnergy,
+            trackEnergy: song.trackEnergy,
+            targetValence: song.targetValence,
+            trackValence: song.trackValence
+          }))
+        },
+        captionSuggestions: {
+          create: rankedCaptions.map(caption => ({
+            text: caption.text,
+            predictedEngagementScore: caption.predictedEngagementScore,
+            toneCategory: caption.toneCategory,
+            isCliche: caption.isCliche
+          }))
+        }
+      },
+      include: {
+        songSuggestions: true,
+        captionSuggestions: true
+      }
+    });
 
     return NextResponse.json({
+      uploadId: upload.id,
       vision: visionData,
       classification: classificationData,
-      songs: songRecommendations,
-      captions: rankedCaptions
+      songs: upload.songSuggestions,
+      captions: upload.captionSuggestions
     });
     
   } catch (error) {
