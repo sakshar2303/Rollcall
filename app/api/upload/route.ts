@@ -154,6 +154,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("[Upload] Error processing request:", error);
     const message = error?.message || String(error) || "Unknown Server Crash";
-    return NextResponse.json({ error: `CRASH: ${message}` }, { status: 500 });
+    const stack = error?.stack || "";
+    return NextResponse.json({ error: `CRASH: ${message} | STACK: ${stack}` }, { status: 500 });
   }
 }
