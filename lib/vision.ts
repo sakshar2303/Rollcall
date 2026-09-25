@@ -1,9 +1,10 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 export async function extractImageVibe(base64Image: string) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.warn("No OPENAI_API_KEY found, using mock vision data");
-    // Return mock data for testing the pipeline if no key is provided
+    console.warn("No GEMINI_API_KEY found, using mock vision data");
     return {
       scene: "A sunlit cafe with wooden tables and plants",
       lighting: "Soft, natural daylight",
@@ -13,20 +14,11 @@ export async function extractImageVibe(base64Image: string) {
     };
   }
 
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert visual analyst. Your task is to extract structural visual attributes from an image to inform a vibe-matching algorithm for music and captions. 
-            
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const prompt = `You are an expert visual analyst. Your task is to extract structural visual attributes from an image to inform a vibe-matching algorithm for music and captions. 
+
 Respond ONLY with a valid JSON object matching this exact structure, with no markdown formatting or extra text:
 {
   "scene": "string (brief description of the location/setting)",
@@ -34,37 +26,26 @@ Respond ONLY with a valid JSON object matching this exact structure, with no mar
   "dominantColors": ["string", "string"],
   "activity": "string (what is happening or the implied action)",
   "timeOfDay": "string (e.g., Morning, Golden Hour, Night, Unknown)"
-}`
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`,
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 300,
-        response_format: { type: "json_object" }
-      }),
-    });
+}`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Vision API Error:", errorText);
-      throw new Error("Failed to analyze image");
+  const imageParts = [
+    {
+      inlineData: {
+        data: base64Image,
+        mimeType: "image/jpeg"
+      }
     }
+  ];
 
-    const data = await response.json();
-    const content = data.choices[0].message.content;
-    return JSON.parse(content);
+  try {
+    const result = await model.generateContent([prompt, ...imageParts]);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(text);
   } catch (error) {
-    console.error("Error extracting image vibe:", error);
-    throw error;
+    console.error("Gemini Vision API error", error);
+    throw new Error("Failed to extract image vibe");
   }
 }
 
@@ -80,9 +61,9 @@ export function aggregateVisionData(visionResults: any[]) {
   // For text fields, we can just join them to give the LLM context of the full "carousel story"
   return {
     scene: "Carousel sequence: " + visionResults.map(r => r.scene).join(" -> "),
-    lighting: visionResults.map(r => r.lighting)[0], // Assume first frame sets lighting or use a mixed description
+    lighting: visionResults.map(r => r.lighting)[0],
     dominantColors,
     activity: visionResults.map(r => r.activity).join(" then "),
-    timeOfDay: visionResults[0].timeOfDay // Generally stays the same across a carousel
+    timeOfDay: visionResults[0].timeOfDay 
   };
 }

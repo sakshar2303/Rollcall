@@ -10,7 +10,8 @@
     "postinstall": "prisma generate || exit 0"
   },
   "dependencies": {
-    "@prisma/client": "^7.10.0",
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^5.10.2",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",
     "framer-motion": "^13.4.3",
@@ -26,7 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
-    "prisma": "^8.0.0-rc.17",
+    "prisma": "^5.10.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

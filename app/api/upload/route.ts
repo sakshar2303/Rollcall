@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
             url: "local-base64-omitted", // In production this would be an S3 URL
             scene: v.scene,
             lighting: v.lighting,
-            dominantColors: v.dominantColors || [],
+            dominantColors: v.dominantColors ? v.dominantColors.join(",") : null,
             activity: v.activity,
             timeOfDay: v.timeOfDay,
           }))

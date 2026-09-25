@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { rankCaption, CaptionRanking, VibeClassification } from "./jevai";
 
 export type RankedCaption = CaptionRanking & {
@@ -5,11 +6,10 @@ export type RankedCaption = CaptionRanking & {
 };
 
 export async function generateCaptionCandidates(visionData: any, vibe: VibeClassification): Promise<string[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.warn("No OPENAI_API_KEY found, using mock captions");
-    // Return mock data for testing the pipeline if no key is provided
+    console.warn("No GEMINI_API_KEY found, using mock captions");
     return [
       "Vibes only ✨",
       "Living my best life in the moment",
@@ -20,42 +20,24 @@ export async function generateCaptionCandidates(visionData: any, vibe: VibeClass
     ];
   }
 
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const prompt = `You are an expert Instagram copywriter. Given a scene description and a target vibe, generate 6-8 unique, high-quality caption options for the photo. 
+Do not include hashtags. Do not use quotes around the captions. Output exactly one caption per line.
+The captions should range in tone (some short, some poetic, some witty).
+
+Vibe: ${vibe.choice} (Energy: ${vibe.score}/5, Aesthetic: ${vibe.isAesthetic})
+Scene Data: ${JSON.stringify(visionData)}`;
+
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert Instagram copywriter. Given a scene description and a target vibe, generate 6-8 unique, high-quality caption options for the photo. 
-            Do not include hashtags. Do not use quotes around the captions. Output exactly one caption per line.
-            The captions should range in tone (some short, some poetic, some witty).`
-          },
-          {
-            role: "user",
-            content: `Vibe: ${vibe.choice} (Energy: ${vibe.score}/5, Aesthetic: ${vibe.isAesthetic})\n\nScene Data: ${JSON.stringify(visionData)}`
-          },
-        ],
-        max_tokens: 200,
-        temperature: 0.8
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to generate captions: ${await response.text()}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0].message.content as string;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text();
     
     // Split by newlines and clean up empty strings or list numbers
     return content.split("\n")
-      .map(c => c.replace(/^\d+\.\s*/, "").trim())
+      .map(c => c.replace(/^\d+\.\s*/, "").replace(/^[-*]\s*/, "").trim())
       .filter(c => c.length > 0)
       .slice(0, 8);
   } catch (error) {
